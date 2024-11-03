@@ -13,6 +13,9 @@ cur_dir=$(pwd)
 # check os
 if [[ -f /etc/redhat-release ]]; then
     release="centos"
+elif cat /etc/issue | grep -Eqi "alpine"; then
+    release="alpine"
+    echo -e "${red}脚本暂不支持alpine系统！${plain}\n" && exit 1
 elif cat /etc/issue | grep -Eqi "debian"; then
     release="debian"
 elif cat /etc/issue | grep -Eqi "ubuntu"; then
@@ -61,6 +64,9 @@ if [[ x"${release}" == x"centos" ]]; then
     if [[ ${os_version} -le 6 ]]; then
         echo -e "${red}请使用 CentOS 7 或更高版本的系统！${plain}\n" && exit 1
     fi
+    if [[ ${os_version} -eq 7 ]]; then
+        echo -e "${red}注意： CentOS 7 无法使用hysteria1/2协议！${plain}\n"
+    fi
 elif [[ x"${release}" == x"ubuntu" ]]; then
     if [[ ${os_version} -lt 16 ]]; then
         echo -e "${red}请使用 Ubuntu 16 或更高版本的系统！${plain}\n" && exit 1
@@ -87,10 +93,10 @@ install_base() {
 
 # 0: running, 1: not running, 2: not installed
 check_status() {
-    if [[ ! -f /etc/systemd/system/XrayR.service ]]; then
+    if [[ ! -f /etc/systemd/system/V2bX.service ]]; then
         return 2
     fi
-    temp=$(systemctl status XrayR | grep Active | awk '{print $3}' | cut -d "(" -f2 | cut -d ")" -f1)
+    temp=$(systemctl status V2bX | grep Active | awk '{print $3}' | cut -d "(" -f2 | cut -d ")" -f1)
     if [[ x"${temp}" == x"running" ]]; then
         return 0
     else
@@ -107,20 +113,20 @@ install_V2bX() {
     cd /usr/local/V2bX/
 
     if  [ $# == 0 ] ;then
-        last_version=$(curl -Ls "https://api.github.com/repos/InazumaV/V2bX/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        last_version=$(curl -Ls "https://api.github.com/repos/wyx2685/V2bX/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
         if [[ ! -n "$last_version" ]]; then
             echo -e "${red}检测 V2bX 版本失败，可能是超出 Github API 限制，请稍后再试，或手动指定 V2bX 版本安装${plain}"
             exit 1
         fi
         echo -e "检测到 V2bX 最新版本：${last_version}，开始安装"
-        wget -q -N --no-check-certificate -O /usr/local/V2bX/V2bX-linux.zip https://github.com/InazumaV/V2bX/releases/download/${last_version}/V2bX-linux-${arch}.zip
+        wget -q -N --no-check-certificate -O /usr/local/V2bX/V2bX-linux.zip https://github.com/wyx2685/V2bX/releases/download/${last_version}/V2bX-linux-${arch}.zip
         if [[ $? -ne 0 ]]; then
             echo -e "${red}下载 V2bX 失败，请确保你的服务器能够下载 Github 的文件${plain}"
             exit 1
         fi
     else
         last_version=$1
-        url="https://github.com/InazumaV/V2bX/releases/download/${last_version}/V2bX-linux-${arch}.zip"
+        url="https://github.com/wyx2685/V2bX/releases/download/${last_version}/V2bX-linux-${arch}.zip"
         echo -e "开始安装 V2bX $1"
         wget -q -N --no-check-certificate -O /usr/local/V2bX/V2bX-linux.zip ${url}
         if [[ $? -ne 0 ]]; then
@@ -134,7 +140,7 @@ install_V2bX() {
     chmod +x V2bX
     mkdir /etc/V2bX/ -p
     rm /etc/systemd/system/V2bX.service -f
-    file="https://github.com/InazumaV/V2bX-script/raw/master/V2bX.service"
+    file="https://github.com/wyx2685/V2bX-script/raw/master/V2bX.service"
     wget -q -N --no-check-certificate -O /etc/systemd/system/V2bX.service ${file}
     #cp -f V2bX.service /etc/systemd/system/
     systemctl daemon-reload
@@ -147,7 +153,7 @@ install_V2bX() {
     if [[ ! -f /etc/V2bX/config.json ]]; then
         cp config.json /etc/V2bX/
         echo -e ""
-        echo -e "全新安装，请先参看教程：https://github.com/InazumaV/V2bX/tree/master/example，配置必要的内容"
+        echo -e "全新安装，请先参看教程：https://v2bx.v-50.me/，配置必要的内容"
         first_install=true
     else
         systemctl start V2bX
@@ -174,7 +180,7 @@ install_V2bX() {
     if [[ ! -f /etc/V2bX/custom_inbound.json ]]; then
         cp custom_inbound.json /etc/V2bX/
     fi
-    curl -o /usr/bin/V2bX -Ls https://raw.githubusercontent.com/InazumaV/V2bX-script/master/V2bX.sh
+    curl -o /usr/bin/V2bX -Ls https://raw.githubusercontent.com/wyx2685/V2bX-script/master/V2bX.sh
     chmod +x /usr/bin/V2bX
     if [ ! -L /usr/bin/v2bx ]; then
         ln -s /usr/bin/V2bX /usr/bin/v2bx
@@ -205,14 +211,10 @@ install_V2bX() {
     if [[ $first_install == true ]]; then
         read -rp "检测到你为第一次安装V2bX,是否自动直接生成配置文件？(y/n): " if_generate
         if [[ $if_generate == [Yy] ]]; then
-            curl -o ./initconfig.sh -Ls https://raw.githubusercontent.com/misakano7545/v2bx-script/refs/heads/main/initconfig.sh
+            curl -o ./initconfig.sh -Ls https://raw.githubusercontent.com/wyx2685/V2bX-script/master/initconfig.sh
             source initconfig.sh
             rm initconfig.sh -f
             generate_config_file
-            read -rp "是否安装bbr内核 ?(y/n): " if_install_bbr
-            if [[ $if_install_bbr == [Yy] ]]; then
-                install_bbr
-            fi
         fi
     fi
 }
